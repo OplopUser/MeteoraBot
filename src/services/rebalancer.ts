@@ -907,6 +907,28 @@ export class RebalancerService {
       }
     }
 
+    // Guard: check if a position was already created by a previous timed-out/failed attempt.
+    // This prevents creating duplicate positions that become orphans.
+    const existingPositions = await this.meteoraClient.listPositions(poolAddress);
+    const alreadyCreated = existingPositions.find(
+      (p) => p.positionAddress !== pending.previousPositionAddress
+    );
+    if (alreadyCreated) {
+      this.logger.info(
+        { positionAddress: alreadyCreated.positionAddress, phase: "opening" },
+        "position already exists on-chain from a previous attempt; finalizing instead of opening a new one"
+      );
+      await this.finalizeRebalance(
+        state,
+        alreadyCreated.positionAddress,
+        alreadyCreated.lowerBinId,
+        alreadyCreated.upperBinId,
+        binIdToPrice(alreadyCreated.lowerBinId, binStep, this.decimalAdjust),
+        binIdToPrice(alreadyCreated.upperBinId, binStep, this.decimalAdjust)
+      );
+      return;
+    }
+
     try {
       let balances = await this.meteoraClient.getWalletBalances(tokenAMint, tokenBMint);
       balances = await this.capBalancesToAllocation(pending.targetCenterPrice, balances);
