@@ -1,0 +1,28 @@
+services:
+  meteora-bot:
+    image: ghcr.io/oplopuser/meteorabot:latest
+    container_name: meteora-bot
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8789:8789"
+    volumes:
+      - ./data:/app/data
+      - ./wallet.json:/app/wallet.json:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/pi/.docker/config.json:/config.json:ro

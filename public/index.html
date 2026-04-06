@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meteora DLMM Bot Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1>Meteora DLMM Dashboard</h1>
+          <span id="queueBadge" class="badge idle">Queue 0</span>
+        </div>
+        <div class="topbar-right">
+          <span class="topbar-wallet" id="walletAddress">-</span>
+        </div>
+      </header>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <span class="kpi-label">Net PnL</span>
+          <span id="totalPnlValue" class="kpi-value flat">-</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Realized</span>
+          <span id="realizedPnlValue" class="kpi-value flat">-</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Open PnL</span>
+          <span id="openPnlValue" class="kpi-value flat">-</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Fees Earned</span>
+          <span id="feesEarnedValue" class="kpi-value flat">-</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Allocation</span>
+          <span id="allocationValue" class="kpi-value">-</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Bots</span>
+          <span class="kpi-value"><span id="enabledBots">-</span> / <span id="monitoringBots">-</span></span>
+        </div>
+      </div>
+
+      <div class="wallet-tokens-row">
+        <span class="token-pill">Open: <strong id="openPositionsValue">-</strong></span>
+        <span class="token-pill">Closed: <strong id="closedPositionsValue">-</strong></span>
+      </div>
+
+      <p id="orphanWarning" class="warning-note" hidden></p>
+
+      <section class="panel bots-card">
+        <div class="section-head">
+          <h2>Active LP Positions</h2>
+        </div>
+        <div class="table-shell">
+          <table class="positions-table" id="positionsTable">
+            <thead>
+              <tr>
+                <th>Price Range</th>
+                <th>Your Liquidity</th>
+                <th>Claimable Fees</th>
+                <th>PnL</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="positionsBody">
+              <tr><td colspan="5" class="empty-row">No active LP positions.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel bots-card">
+        <div class="section-head">
+          <h2>Bots</h2>
+        </div>
+        <div id="botsGrid" class="bots-grid">
+          <p class="empty-state">No bots yet.</p>
+        </div>
+      </section>
+
+      <section class="panel create-card">
+        <details class="create-details">
+          <summary class="create-summary"><h2>Create New Bot</h2></summary>
+          <form id="createBotForm" class="create-form">
+            <label>
+              <span>Name</span>
+              <input id="nameInput" name="name" placeholder="SOL/USDC Spot Bot" required />
+            </label>
+            <label class="wide">
+              <span>DLMM Pool Address</span>
+              <input id="poolInput" name="dlmmPoolAddress" placeholder="Enter Meteora DLMM pool address..." required />
+            </label>
+            <label>
+              <span>Min Price</span>
+              <input name="minPrice" type="number" min="0" step="any" placeholder="e.g. 120" required />
+            </label>
+            <label>
+              <span>Max Price</span>
+              <input name="maxPrice" type="number" min="0" step="any" placeholder="e.g. 180" required />
+            </label>
+            <label>
+              <span>Strategy</span>
+              <select name="strategy" required>
+                <option value="Spot" selected>Spot (Uniform)</option>
+                <option value="Curve">Curve (Gaussian)</option>
+                <option value="BidAsk">BidAsk (Edges)</option>
+              </select>
+            </label>
+            <label>
+              <span>Allocation (USDC)</span>
+              <input id="allocationInput" name="allocationUsdc" type="number" min="1" step="0.01" value="100" required />
+            </label>
+            <label>
+              <span>Poll (sec)</span>
+              <input name="pollSeconds" type="number" min="5" step="1" value="15" required />
+            </label>
+            <details class="advanced-toggle">
+              <summary>Advanced settings</summary>
+              <div class="advanced-grid">
+                <label>
+                  <span>Max Slippage Bps</span>
+                  <input name="maxSlippageBps" type="number" min="1" step="1" value="100" required />
+                </label>
+                <label>
+                  <span>Close Retry Bps</span>
+                  <input name="closeRetrySlippageBps" type="number" min="1" step="1" value="300" required />
+                </label>
+                <label>
+                  <span>Close Final Bps</span>
+                  <input name="closeFinalRetrySlippageBps" type="number" min="1" step="1" value="1000" required />
+                </label>
+                <label>
+                  <span>Open Retry Bps</span>
+                  <input name="openRetrySlippageBps" type="number" min="1" step="1" value="300" required />
+                </label>
+                <label>
+                  <span>Open Final Bps</span>
+                  <input name="openFinalRetrySlippageBps" type="number" min="1" step="1" value="1000" required />
+                </label>
+                <label>
+                  <span>Slippage Retries/Tier</span>
+                  <input name="slippageRetriesPerTier" type="number" min="1" step="1" value="3" required />
+                </label>
+                <label>
+                  <span>Open Buffer Bps</span>
+                  <input name="openDeploymentBufferBps" type="number" min="0" step="1" value="100" required />
+                </label>
+                <label>
+                  <span>Open Retry Buffer</span>
+                  <input name="openRetryDeploymentBufferBps" type="number" min="0" step="1" value="300" required />
+                </label>
+                <label>
+                  <span>Open Final Buffer</span>
+                  <input name="openFinalDeploymentBufferBps" type="number" min="0" step="1" value="500" required />
+                </label>
+                <label>
+                  <span>Min Swap Quote</span>
+                  <input name="minSwapQuoteValue" type="number" min="0" step="0.01" value="10" required />
+                </label>
+                <label>
+                  <span>Balance Tolerance Bps</span>
+                  <input name="openBalanceToleranceBps" type="number" min="0" step="1" value="25" required />
+                </label>
+              </div>
+            </details>
+            <div class="form-actions wide">
+              <button class="play" type="submit">Create Bot</button>
+            </div>
+          </form>
+        </details>
+      </section>
+
+      <section class="panel ledger-card">
+        <div class="section-head">
+          <h2>Position Ledger</h2>
+        </div>
+        <div class="table-shell">
+          <table class="ledger-table">
+            <thead>
+              <tr>
+                <th>Bot</th>
+                <th>Pool</th>
+                <th>Status</th>
+                <th>Position</th>
+                <th>Opened</th>
+                <th>Closed</th>
+                <th>Entry Capital</th>
+                <th>Current / Final</th>
+                <th>Net PnL</th>
+                <th>Fees / Costs</th>
+              </tr>
+            </thead>
+            <tbody id="pnlPositionsBody">
+              <tr>
+                <td colspan="10" class="empty-row">No tracked positions yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel ledger-card">
+        <div class="section-head">
+          <h2>Transactions</h2>
+        </div>
+        <div class="table-filters">
+          <label>
+            <span>Bot</span>
+            <select id="transactionFilter">
+              <option value="">All bots</option>
+            </select>
+          </label>
+          <label>
+            <span>Type</span>
+            <select id="typeFilter">
+              <option value="">All types</option>
+            </select>
+          </label>
+          <label>
+            <span>Status</span>
+            <select id="statusFilter">
+              <option value="">All statuses</option>
+            </select>
+          </label>
+          <label class="search-filter">
+            <span>Search</span>
+            <input id="searchFilter" type="search" placeholder="Tx id or summary..." />
+          </label>
+        </div>
+        <div class="table-shell">
+          <table class="ledger-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Bot</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Tx ID</th>
+                <th>Fees</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody id="transactionsBody">
+              <tr>
+                <td colspan="7" class="empty-row">No transaction events yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

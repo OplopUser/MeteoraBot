@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "meteora-dashboard",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "src/controlPanel.ts"],
+      "port": 8789
+    }
+  ]
+}

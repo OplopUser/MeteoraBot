@@ -1,0 +1,14 @@
+node_modules
+dist
+data
+.env
+wallet.json
+*keypair*.json
+*.log
+.DS_Store
+coverage
+.git
+.github
+tests
+vitest.config.ts
+*.md
