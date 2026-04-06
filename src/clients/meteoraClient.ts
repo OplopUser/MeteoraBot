@@ -15,6 +15,10 @@ import type { ManagedPosition, PoolMetadata, PoolSnapshot, WalletBalances } from
 import { binIdToPrice, fromBaseUnits } from "../strategy/bins.js";
 import { RpcAccountReader } from "../infra/rpcAccountReader.js";
 import { JupiterClient } from "./jupiterClient.js";
+// Static import for ESM/CJS compat (dynamic import() breaks in Docker)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import DLMM_SDK from "@meteora-ag/dlmm";
+const DLMM_CLASS = DLMM_SDK as any;
 
 export class InsufficientAllocationError extends Error {
   constructor(message: string) {
@@ -55,8 +59,7 @@ export class MeteoraClient {
   private jupiterClient!: JupiterClient;
   private initialized = false;
 
-  // Dynamic import of DLMM module (ESM)
-  private DLMM: any;
+  private readonly DLMM: any = DLMM_CLASS;
 
   constructor(
     private readonly config: AppConfig,
@@ -82,10 +85,6 @@ export class MeteoraClient {
       this.config.JUPITER_API_KEY,
       this.logger
     );
-
-    // Dynamic import of DLMM SDK
-    const dlmmModule = await import("@meteora-ag/dlmm");
-    this.DLMM = dlmmModule.default ?? dlmmModule;
 
     this.initialized = true;
     this.logger.info({ wallet: this.wallet.publicKey.toBase58() }, "meteora client initialized");
