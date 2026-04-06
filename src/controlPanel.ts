@@ -12,7 +12,7 @@ import { binIdToPrice, fromBaseUnits } from "./strategy/bins.js";
 
 dotenv.config({ override: true });
 
-const HOST = "127.0.0.1";
+const HOST = process.env.HOST ?? "0.0.0.0";
 const PORT = Number(process.env.UI_PORT ?? 8789);
 const PUBLIC_DIR = resolve("public");
 
