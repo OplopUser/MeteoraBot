@@ -10,3 +10,4 @@ wallet.json
 *.pem
 *.key
 *.tar.gz
+.claude/
