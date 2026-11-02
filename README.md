@@ -269,7 +269,11 @@ solana-keygen new --outfile wallet.json
 
 ### Environment variables
 
-Create a `.env` in the project root. `.env` values **override** variables already set in the environment (`dotenv` with `override: true`).
+Copy `.env.example` to `.env` in the project root and fill it in. `.env` values **override** variables already set in the environment (`dotenv` with `override: true`).
+
+```bash
+cp .env.example .env
+```
 
 ```dotenv
 SOLANA_RPC_URL=https://your-rpc.example
@@ -297,6 +301,8 @@ BOT_WALLET_KEYPAIR_PATH=./wallet.json
 | `JUPITER_API_KEY` | *(empty)* | Sent as `x-api-key` when set |
 | `HOST` | `0.0.0.0` | Control panel bind address |
 | `UI_PORT` | `8789` | Control panel port |
+| `POOL_ADDRESS` | *(empty)* | DLMM pool (lb pair) address for the legacy CLI and `scripts/force-close.ts`. Required by both; not used by the control panel |
+| `DEFAULT_STRATEGY` | `Spot` | Distribution strategy for the legacy CLI (`Spot`, `Curve` or `BidAsk`) |
 
 **Global trading defaults.** In the control panel each bot's own settings override these values (`src/botConfig.ts`). They only take effect in the legacy CLI.
 
@@ -310,8 +316,6 @@ BOT_WALLET_KEYPAIR_PATH=./wallet.json
 | `OPEN_FINAL_DEPLOYMENT_BUFFER_BPS` | `500` |
 | `OPEN_BALANCE_TOLERANCE_BPS` | `25` |
 
-**Parsed but currently unused:** `DEFAULT_STRATEGY` (`Spot`), `CLOSE_RETRY_SLIPPAGE_BPS` (`300`), `CLOSE_FINAL_RETRY_SLIPPAGE_BPS` (`1000`), `OPEN_RETRY_SLIPPAGE_BPS` (`300`), `OPEN_FINAL_RETRY_SLIPPAGE_BPS` (`1000`), `SOL_RESERVE_LAMPORTS` (`50000000`; the SOL reserve is hard-coded to 0.1 SOL), `MIN_SWAP_USDC` (`10`).
-
 ## Running locally
 
 | Command | What it does |
@@ -320,7 +324,7 @@ BOT_WALLET_KEYPAIR_PATH=./wallet.json
 | `npm test` | Runs the Vitest suite |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run build` | Compiles TypeScript to `dist/` (used as a check; the app itself runs through `tsx`) |
-| `npm run run` / `npm run dry-run` / `npm run rebalance-now` | Legacy single-bot CLI (`src/index.ts`). It does not currently pass a pool address to the rebalancer, so it only logs `no pool address configured`. Use the control panel instead. |
+| `npm run run` / `npm run dry-run` / `npm run rebalance-now` | Legacy single-bot CLI (`src/index.ts`) for one pool, see [Legacy CLI](#legacy-cli) |
 
 Typical first run:
 
@@ -329,6 +333,25 @@ Typical first run:
 3. Press **Start**. A bot with no position **opens one straight away**, swapping first if needed.
 
 Runtime data (`bots.json`, `pnl-ledger.json`, logs) is written to `./data/`.
+
+### Legacy CLI
+
+`src/index.ts` runs a single rebalancer for one pool without the control panel:
+
+```bash
+npm run dry-run                       # pool from POOL_ADDRESS
+npm run dry-run -- <dlmm-pool-address> # or pass the pool as an argument (overrides POOL_ADDRESS)
+```
+
+| Mode | What it does |
+| --- | --- |
+| `run` | Polls the pool every `POLL_SECONDS` and rebalances when triggered. **Sends transactions.** |
+| `dry-run` | One cycle. Evaluates triggers and logs the close/swap/open it would do, without sending them. If the CLI state file holds an unfinished rebalance, dry-run logs that recovery is pending and stops without sending anything; run `npm run run` to finish it. |
+| `rebalance-now` | One cycle that forces a rebalance. **Sends transactions.** |
+
+The pool comes from the argument or `POOL_ADDRESS`; the CLI exits with an error if neither is set or the address is not a valid public key. Token mints, decimals and bin step are read from the pool, the strategy comes from `DEFAULT_STRATEGY`, and the trading settings from the global defaults above. Runtime state is saved to `state.json` next to `BOT_REGISTRY_FILE`.
+
+> The CLI has **no allocation cap** (there is no `allocationUsdc` here): it deploys the wallet's whole balance of the pool's tokens, minus the deployment buffer and SOL reserve. It does not write to the PnL ledger, and with no position it opens one straight away. Stop any control-panel bot on the same pool first.
 
 ## Running with Docker / on a Raspberry Pi
 
@@ -372,12 +395,14 @@ npx tsx scripts/list-positions.ts
 | --- | --- |
 | `scripts/list-positions.ts` | Lists the wallet's positions in one pool with total X/Y amounts and non-empty bin counts. Read-only. |
 | `scripts/check-balance.ts` | Prints how many DLMM positions the wallet still has, plus its SOL and USDC balances. The USD estimate uses a **hard-coded** SOL price, so treat it as rough. Read-only. |
-| `scripts/force-close.ts` | **Sends transactions.** Closes every wallet position in one pool except the address in the `ACTIVE_POSITION` environment variable. **If `ACTIVE_POSITION` is not set, it closes all of them.** |
+| `scripts/force-close.ts` | **Sends transactions.** Closes every wallet position in the `POOL_ADDRESS` pool except the address in the `ACTIVE_POSITION` environment variable. Refuses to run without `ACTIVE_POSITION` unless `--all` is passed, and refuses if `ACTIVE_POSITION` is not one of the wallet's positions in that pool. Exits non-zero if any close fails. |
 
-`list-positions.ts` and `force-close.ts` target a pool address hard-coded in the `pool` constant at the top of each file (a SOL/USDC pool). Edit it before using them on another pool. Stop the bot before running `force-close.ts`:
+`force-close.ts` takes its pool from `POOL_ADDRESS` (in `.env` or the environment) and exits with an error if it is not set. `list-positions.ts` still targets a pool address hard-coded in the `pool` constant at the top of the file (a SOL/USDC pool); edit it before using it on another pool. Stop the bot before running `force-close.ts`:
 
 ```bash
 ACTIVE_POSITION=<position-to-keep> npx tsx scripts/force-close.ts
+# close every position in the pool, including the bot's:
+npx tsx scripts/force-close.ts --all
 ```
 
 ## Testing

@@ -11,6 +11,7 @@ const envSchema = z.object({
   SOLANA_RPC_URL: z.string().url(),
   SOLANA_RPC_FALLBACK_URLS: z.string().default(""),
   BOT_WALLET_KEYPAIR_PATH: z.string().min(1),
+  POOL_ADDRESS: z.string().trim().default(""),
   BOT_REGISTRY_FILE: z.string().default("./data/bots.json"),
   BOT_PNL_LEDGER_FILE: z.string().default("./data/pnl-ledger.json"),
   LOG_FILE: z.string().default("./data/logs/rebalancer.log"),

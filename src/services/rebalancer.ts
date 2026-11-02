@@ -122,6 +122,17 @@ export class RebalancerService {
     if (state.pendingRebalance) {
       this.normalizePendingRebalance(state.pendingRebalance);
     }
+    if (
+      mode === "dry-run" &&
+      (state.pendingRebalance || (state.paused && this.isTimeoutMessage(state.pauseReason)))
+    ) {
+      // Recovery sends real transactions, so dry-run only reports it and leaves the state untouched.
+      this.logger.warn(
+        { pendingPhase: state.pendingRebalance?.phase ?? null, pauseReason: state.pauseReason },
+        "dry-run: pending rebalance recovery would run here; skipping (no transactions sent)"
+      );
+      return;
+    }
     state.lastCycleAt = new Date().toISOString();
     const wasTriggered = state.driftStatus === "triggered";
 
