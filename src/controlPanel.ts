@@ -1,19 +1,19 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
-import dotenv from "dotenv";
+import { resolve, sep } from "node:path";
 
 import { loadConfig } from "./config.js";
 import { createLogger } from "./logger.js";
+import { createPanelAuth, isLoopbackHost } from "./panelAuth.js";
 import { BotRegistryStore } from "./state/botRegistryStore.js";
 import { BotSupervisor } from "./services/botSupervisor.js";
 import { binIdToPrice, fromBaseUnits } from "./strategy/bins.js";
 
-dotenv.config({ override: true });
-
-const HOST = process.env.HOST ?? "0.0.0.0";
+// Environment is loaded from .env by ./config.js.
+const HOST = process.env.UI_HOST?.trim() || "127.0.0.1";
 const PORT = Number(process.env.UI_PORT ?? 8789);
+const UI_TOKEN = process.env.UI_TOKEN?.trim() ?? "";
+const authenticate = createPanelAuth(UI_TOKEN);
 const PUBLIC_DIR = resolve("public");
 
 const config = loadConfig();
@@ -401,7 +401,18 @@ function buildPositionViews(
 async function serveStatic(pathname: string, response: ServerResponse) {
   const filePath =
     pathname === "/" ? resolve(PUBLIC_DIR, "index.html") : resolve(PUBLIC_DIR, `.${pathname}`);
-  const file = await readFile(filePath);
+  if (!filePath.startsWith(PUBLIC_DIR + sep)) {
+    return sendError(response, 404, "Not found");
+  }
+  let file: Buffer;
+  try {
+    file = await readFile(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "EISDIR") {
+      return sendError(response, 404, "Not found");
+    }
+    throw error;
+  }
   const contentType =
     pathname.endsWith(".css")
       ? "text/css; charset=utf-8"
@@ -607,7 +618,15 @@ async function main() {
 
   const server = createServer(async (request, response) => {
     try {
-      const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
+      const url = new URL(request.url ?? "/", "http://localhost");
+      if (!(await authenticate(request, response, url))) {
+        return;
+      }
+      if (url.pathname === "/login") {
+        response.writeHead(303, { location: "/" });
+        response.end();
+        return;
+      }
       if (url.pathname.startsWith("/api/")) {
         await handleApi(request, response, url);
         return;
@@ -620,7 +639,14 @@ async function main() {
   });
 
   server.listen(PORT, HOST, () => {
-    logger.info({ host: HOST, port: PORT }, "meteora bot control panel listening");
+    logger.info({ host: HOST, port: PORT, auth: UI_TOKEN ? "token" : "none" }, "meteora bot control panel listening");
+    if (!UI_TOKEN && !isLoopbackHost(HOST)) {
+      logger.warn(
+        { host: HOST, port: PORT },
+        "control panel is bound to a non-loopback address WITHOUT authentication: anyone who can reach this port " +
+          "can trade the wallet's funds. Set UI_TOKEN, or bind to 127.0.0.1 with UI_HOST."
+      );
+    }
   });
 }
 

@@ -1,3 +1,5 @@
+import { escapeHtml } from "./escape.js";
+
 const walletAddress = document.getElementById("walletAddress");
 const enabledBots = document.getElementById("enabledBots");
 const monitoringBots = document.getElementById("monitoringBots");
@@ -40,6 +42,12 @@ async function request(path, options = {}) {
     ...options
   });
 
+  if (response.status === 401) {
+    // UI_TOKEN is set and the session cookie is missing or stale: show the login page.
+    window.location.assign("/");
+    throw new Error("Unauthorized");
+  }
+
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.error ?? `Request failed: ${response.status}`);
@@ -51,6 +59,11 @@ async function request(path, options = {}) {
 
 function formatValue(value) {
   return value ?? "-";
+}
+
+// formatValue for innerHTML templates: server data (bot names, symbols, log text) is escaped.
+function htmlValue(value) {
+  return escapeHtml(formatValue(value));
 }
 
 function formatUsd(value) {
@@ -136,7 +149,7 @@ function renderPnl(summary) {
 function renderTransactionFilter(bots) {
   const previous = transactionFilter.value;
   transactionFilter.innerHTML = `<option value="">All bots</option>${bots
-    .map((bot) => `<option value="${bot.id}">${bot.name}</option>`)
+    .map((bot) => `<option value="${escapeHtml(bot.id)}">${escapeHtml(bot.name)}</option>`)
     .join("")}`;
   transactionFilter.value = bots.some((bot) => bot.id === previous) ? previous : "";
 }
@@ -144,36 +157,36 @@ function renderTransactionFilter(bots) {
 function renderSelectOptions(select, values, allLabel) {
   const previous = select.value;
   select.innerHTML = `<option value="">${allLabel}</option>${values
-    .map((value) => `<option value="${value}">${value}</option>`)
+    .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
     .join("")}`;
   select.value = values.includes(previous) ? previous : "";
 }
 
 function botCardHtml(bot) {
   return `
-    <article class="bot-card" data-bot-id="${bot.id}">
+    <article class="bot-card" data-bot-id="${escapeHtml(bot.id)}">
       <div class="bot-head">
         <div>
-          <p class="eyebrow">${bot.tokenPair} &middot; ${bot.strategy}</p>
-          <h3>${bot.name}</h3>
+          <p class="eyebrow">${escapeHtml(bot.tokenPair)} &middot; ${escapeHtml(bot.strategy)}</p>
+          <h3>${escapeHtml(bot.name)}</h3>
         </div>
-        <span class="badge ${getBadgeClass(bot.runState)}">${bot.runState}</span>
+        <span class="badge ${getBadgeClass(bot.runState)}">${escapeHtml(bot.runState)}</span>
       </div>
       <dl class="bot-grid">
-        <div><dt>Pool</dt><dd data-field="pool"><code title="${bot.dlmmPoolAddress}">${bot.dlmmPoolAddress}</code></dd></div>
-        <div><dt>Allocation</dt><dd data-field="allocation">${formatValue(bot.allocationUsdc)} USDC</dd></div>
+        <div><dt>Pool</dt><dd data-field="pool"><code title="${escapeHtml(bot.dlmmPoolAddress)}">${escapeHtml(bot.dlmmPoolAddress)}</code></dd></div>
+        <div><dt>Allocation</dt><dd data-field="allocation">${htmlValue(bot.allocationUsdc)} USDC</dd></div>
         <div><dt>Price Range</dt><dd data-field="priceRange">${formatPrice(bot.minPrice)} - ${formatPrice(bot.maxPrice)}</dd></div>
         <div><dt>Observed</dt><dd data-field="observed">${formatPrice(bot.lastObservedPrice)}</dd></div>
         <div><dt>Anchor</dt><dd data-field="anchor">${formatPrice(bot.lastCenterPrice)}</dd></div>
-        <div><dt>Trigger State</dt><dd data-field="triggerState">${formatValue(bot.triggerState)}</dd></div>
-        <div><dt>Position</dt><dd data-field="position">${bot.activePositionAddress ? `<code title="${bot.activePositionAddress}">${bot.activePositionAddress}</code>` : "-"}</dd></div>
-        <div><dt>Last Action</dt><dd data-field="lastAction">${formatValue(bot.latestAction)}</dd></div>
+        <div><dt>Trigger State</dt><dd data-field="triggerState">${htmlValue(bot.triggerState)}</dd></div>
+        <div><dt>Position</dt><dd data-field="position">${bot.activePositionAddress ? `<code title="${escapeHtml(bot.activePositionAddress)}">${escapeHtml(bot.activePositionAddress)}</code>` : "-"}</dd></div>
+        <div><dt>Last Action</dt><dd data-field="lastAction">${htmlValue(bot.latestAction)}</dd></div>
         <div><dt>Open PnL</dt><dd data-field="openPnl" class="${pnlClass(bot.pnl?.openNetPnlUsdc)}">${formatUsd(bot.pnl?.openNetPnlUsdc)}</dd></div>
         <div><dt>Realized PnL</dt><dd data-field="realizedPnl" class="${pnlClass(bot.pnl?.realizedNetPnlUsdc)}">${formatUsd(bot.pnl?.realizedNetPnlUsdc)}</dd></div>
         <div><dt>Total PnL</dt><dd data-field="totalPnl" class="${pnlClass(bot.pnl?.totalNetPnlUsdc)}">${formatUsd(bot.pnl?.totalNetPnlUsdc)}</dd></div>
         <div><dt>Fees Earned</dt><dd data-field="feesEarned" class="${pnlClass(bot.pnl?.feesEarnedUsdc)}">${formatUsd(bot.pnl?.feesEarnedUsdc)}</dd></div>
-        <div><dt>Pause Reason</dt><dd data-field="pauseReason">${formatValue(bot.pauseReason)}</dd></div>
-        <div><dt>Recovery</dt><dd data-field="recovery">${formatRecovery(bot)}</dd></div>
+        <div><dt>Pause Reason</dt><dd data-field="pauseReason">${htmlValue(bot.pauseReason)}</dd></div>
+        <div><dt>Recovery</dt><dd data-field="recovery">${escapeHtml(formatRecovery(bot))}</dd></div>
       </dl>
       <div class="card-actions">
         <button class="play" data-action="start">Start</button>
@@ -183,11 +196,11 @@ function botCardHtml(bot) {
         <button class="secondary" data-action="resume">Resume</button>
         <button class="secondary" data-action="archive">Archive</button>
       </div>
-      <form class="edit-form" data-edit-form="${bot.id}">
-        <label><span>Name</span><input name="name" value="${bot.name}" /></label>
-        <label><span>Allocation</span><input name="allocationUsdc" type="number" min="1" step="0.01" value="${bot.allocationUsdc}" /></label>
-        <label><span>Min Price</span><input name="minPrice" type="number" min="0" step="any" value="${bot.minPrice}" /></label>
-        <label><span>Max Price</span><input name="maxPrice" type="number" min="0" step="any" value="${bot.maxPrice}" /></label>
+      <form class="edit-form" data-edit-form="${escapeHtml(bot.id)}">
+        <label><span>Name</span><input name="name" value="${escapeHtml(bot.name)}" /></label>
+        <label><span>Allocation</span><input name="allocationUsdc" type="number" min="1" step="0.01" value="${escapeHtml(bot.allocationUsdc)}" /></label>
+        <label><span>Min Price</span><input name="minPrice" type="number" min="0" step="any" value="${escapeHtml(bot.minPrice)}" /></label>
+        <label><span>Max Price</span><input name="maxPrice" type="number" min="0" step="any" value="${escapeHtml(bot.maxPrice)}" /></label>
         <label><span>Strategy</span>
           <select name="strategy">
             <option value="Spot" ${bot.strategy === "Spot" ? "selected" : ""}>Spot</option>
@@ -195,10 +208,10 @@ function botCardHtml(bot) {
             <option value="BidAsk" ${bot.strategy === "BidAsk" ? "selected" : ""}>BidAsk</option>
           </select>
         </label>
-        <label><span>Poll Seconds</span><input name="pollSeconds" type="number" min="5" step="1" value="${bot.pollSeconds}" /></label>
-        <label><span>Max Slippage</span><input name="maxSlippageBps" type="number" min="1" step="1" value="${bot.maxSlippageBps ?? 100}" /></label>
+        <label><span>Poll Seconds</span><input name="pollSeconds" type="number" min="5" step="1" value="${escapeHtml(bot.pollSeconds)}" /></label>
+        <label><span>Max Slippage</span><input name="maxSlippageBps" type="number" min="1" step="1" value="${escapeHtml(bot.maxSlippageBps ?? 100)}" /></label>
         <label class="checkbox-label"><input name="autoCompound" type="checkbox" ${bot.autoCompound ? "checked" : ""} /><span>Auto-Compound</span></label>
-        <label><span>Compound Min (USDC)</span><input name="compoundMinValueUsdc" type="number" min="0" step="0.01" value="${bot.compoundMinValueUsdc ?? 0}" /></label>
+        <label><span>Compound Min (USDC)</span><input name="compoundMinValueUsdc" type="number" min="0" step="0.01" value="${escapeHtml(bot.compoundMinValueUsdc ?? 0)}" /></label>
         <div class="form-actions"><button class="secondary" type="submit">Save Changes</button></div>
       </form>
     </article>
@@ -254,7 +267,7 @@ function renderBots(bots) {
 
   if (idsMatch) {
     for (const bot of bots) {
-      const card = botsGrid.querySelector(`[data-bot-id="${bot.id}"]`);
+      const card = botsGrid.querySelector(`[data-bot-id="${CSS.escape(String(bot.id))}"]`);
       if (card) updateBotCard(card, bot);
     }
   } else {
@@ -271,16 +284,16 @@ function renderTransactions(events) {
 
   transactionsBody.innerHTML = events
     .map((event) => {
-      const txId = event.txId ? `<code title="${event.txId}">${event.txId}</code>` : "-";
+      const txId = event.txId ? `<code title="${escapeHtml(event.txId)}">${escapeHtml(event.txId)}</code>` : "-";
       return `
         <tr>
-          <td>${formatValue(event.time)}</td>
-          <td>${formatValue(event.botName ?? event.botId)}</td>
-          <td>${formatValue(event.type)}</td>
-          <td>${formatValue(event.status)}</td>
+          <td>${htmlValue(event.time)}</td>
+          <td>${htmlValue(event.botName ?? event.botId)}</td>
+          <td>${htmlValue(event.type)}</td>
+          <td>${htmlValue(event.status)}</td>
           <td>${txId}</td>
-          <td>${formatValue(event.fees)}</td>
-          <td>${formatValue(event.summary)}</td>
+          <td>${htmlValue(event.fees)}</td>
+          <td>${htmlValue(event.summary)}</td>
         </tr>
       `;
     })
@@ -354,15 +367,17 @@ function renderPositionsTable(positions) {
     const pnlSign = pos.pnlUsdc != null && pos.pnlUsdc > 0 ? "+" : "";
     const pnlPctSign = pos.pnlPct != null && pos.pnlPct > 0 ? "+" : "";
     const label = pos.isOrphaned ? "Orphaned" : (pos.botName ?? "Position");
+    const symbolA = escapeHtml(pos.tokenASymbol);
+    const symbolB = escapeHtml(pos.tokenBSymbol);
 
     return `
-      <tr class="position-row" data-position-address="${pos.positionAddress}" data-bot-id="${pos.botId ?? ""}" data-pool="${pos.dlmmPoolAddress}">
+      <tr class="position-row" data-position-address="${escapeHtml(pos.positionAddress)}" data-bot-id="${escapeHtml(pos.botId)}" data-pool="${escapeHtml(pos.dlmmPoolAddress)}">
         <td class="col-range">
           <div class="range-header">
             <strong>${formatPriceRange(pos.lowerPrice, pos.upperPrice)}</strong>
             ${pos.isOrphaned ? '<span class="badge paused" style="font-size:0.65rem;padding:1px 6px">Orphaned</span>' : ''}
           </div>
-          <div class="range-sub">${pos.tokenBSymbol} per ${pos.tokenASymbol} &middot; ${label}</div>
+          <div class="range-sub">${symbolB} per ${symbolA} &middot; ${escapeHtml(label)}</div>
           <div class="range-bar-mini">
             <div class="range-track">
               <div class="range-fill" style="left:0%;width:100%"></div>
@@ -373,16 +388,16 @@ function renderPositionsTable(positions) {
         <td class="col-liquidity">
           <strong>$${pos.totalValueUsdc.toFixed(2)}</strong>
           <div class="token-breakdown">
-            <span class="token-line">${pos.tokenASymbol} ${formatTokenAmount(pos.tokenAAmount)} ($${pos.tokenAValueUsdc.toFixed(2)})</span>
-            <span class="token-line">${pos.tokenBSymbol} ${formatTokenAmount(pos.tokenBAmount)} ($${pos.tokenBValueUsdc.toFixed(2)})</span>
+            <span class="token-line">${symbolA} ${formatTokenAmount(pos.tokenAAmount)} ($${pos.tokenAValueUsdc.toFixed(2)})</span>
+            <span class="token-line">${symbolB} ${formatTokenAmount(pos.tokenBAmount)} ($${pos.tokenBValueUsdc.toFixed(2)})</span>
           </div>
         </td>
         <td class="col-fees">
           <strong>$${pos.totalFeesUsdc.toFixed(2)}</strong>
           <span class="fee-pct">${pos.feePct.toFixed(2)}%</span>
           <div class="token-breakdown">
-            <span class="token-line">${pos.tokenASymbol} ${formatTokenAmount(pos.feeTokenA)} ($${pos.feeTokenAUsdc.toFixed(2)})</span>
-            <span class="token-line">${pos.tokenBSymbol} ${formatTokenAmount(pos.feeTokenB)} ($${pos.feeTokenBUsdc.toFixed(2)})</span>
+            <span class="token-line">${symbolA} ${formatTokenAmount(pos.feeTokenA)} ($${pos.feeTokenAUsdc.toFixed(2)})</span>
+            <span class="token-line">${symbolB} ${formatTokenAmount(pos.feeTokenB)} ($${pos.feeTokenBUsdc.toFixed(2)})</span>
           </div>
         </td>
         <td class="col-pnl">
@@ -394,8 +409,8 @@ function renderPositionsTable(positions) {
         </td>
         <td class="col-actions">
           ${pos.botId
-            ? `<button class="compound btn-sm" data-action="compound" data-bot-id="${pos.botId}">Compound</button>
-               <button class="secondary btn-sm" data-action="close-position" data-bot-id="${pos.botId}">Close</button>`
+            ? `<button class="compound btn-sm" data-action="compound" data-bot-id="${escapeHtml(pos.botId)}">Compound</button>
+               <button class="secondary btn-sm" data-action="close-position" data-bot-id="${escapeHtml(pos.botId)}">Close</button>`
             : `<span class="hint">Close on Meteora</span>`
           }
         </td>
@@ -415,12 +430,12 @@ function renderPnlPositions(records) {
   pnlPositionsBody.innerHTML = records
     .map((record) => `
       <tr>
-        <td>${formatValue(record.botName)}</td>
-        <td>${formatValue(record.tokenPair)}</td>
-        <td>${formatValue(record.status)}</td>
-        <td><code title="${record.positionAddress}">${record.positionAddress}</code></td>
-        <td>${formatValue(record.openedAt)}</td>
-        <td>${formatValue(record.closedAt)}</td>
+        <td>${htmlValue(record.botName)}</td>
+        <td>${htmlValue(record.tokenPair)}</td>
+        <td>${htmlValue(record.status)}</td>
+        <td><code title="${escapeHtml(record.positionAddress)}">${escapeHtml(record.positionAddress)}</code></td>
+        <td>${htmlValue(record.openedAt)}</td>
+        <td>${htmlValue(record.closedAt)}</td>
         <td>${formatUsd(record.entryCapitalUsdc)}</td>
         <td>${formatUsd(record.status === "open" ? record.latestGrossValueUsdc : record.exitGrossValueUsdc)}</td>
         <td class="${pnlClass(record.status === "open" ? record.latestNetPnlUsdc : record.realizedNetPnlUsdc)}">${formatUsd(record.status === "open" ? record.latestNetPnlUsdc : record.realizedNetPnlUsdc)}</td>
@@ -509,11 +524,11 @@ botsGrid.addEventListener("click", async (event) => {
 
   try {
     if (action === "archive") {
-      await request(`/api/bots/${botId}`, { method: "DELETE" });
+      await request(`/api/bots/${encodeURIComponent(botId)}`, { method: "DELETE" });
     } else if (action === "rebalance") {
-      await request(`/api/bots/${botId}/rebalance`, { method: "POST" });
+      await request(`/api/bots/${encodeURIComponent(botId)}/rebalance`, { method: "POST" });
     } else {
-      await request(`/api/bots/${botId}/${action}`, { method: "POST" });
+      await request(`/api/bots/${encodeURIComponent(botId)}/${action}`, { method: "POST" });
     }
     await refreshStatus();
   } catch (error) {
@@ -546,7 +561,7 @@ botsGrid.addEventListener("submit", async (event) => {
   }
 
   try {
-    await request(`/api/bots/${botId}`, { method: "PATCH", body: JSON.stringify(payload) });
+    await request(`/api/bots/${encodeURIComponent(botId)}`, { method: "PATCH", body: JSON.stringify(payload) });
     await refreshStatus();
   } catch (error) {
     console.error(error);
@@ -569,7 +584,7 @@ positionsBody.addEventListener("click", async (event) => {
     target.textContent = "Compounding...";
 
     try {
-      const result = await request(`/api/bots/${botId}/compound`, { method: "POST" });
+      const result = await request(`/api/bots/${encodeURIComponent(botId)}/compound`, { method: "POST" });
       alert(`Fees compounded. TokenA: ${result?.feesTokenA ?? "0"}, TokenB: ${result?.feesTokenB ?? "0"}`);
       await refreshStatus();
     } catch (error) {
@@ -589,7 +604,7 @@ positionsBody.addEventListener("click", async (event) => {
     target.textContent = "Closing...";
 
     try {
-      const result = await request(`/api/bots/${botId}/close-position`, { method: "POST" });
+      const result = await request(`/api/bots/${encodeURIComponent(botId)}/close-position`, { method: "POST" });
       alert(`Position closed. Tx: ${result?.txId ?? "unknown"}`);
       await refreshStatus();
     } catch (error) {

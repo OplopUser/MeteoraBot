@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { normalizeRpcUrls } from "./infra/rpcFailover.js";
 
-dotenv.config({ override: true });
+dotenv.config({ override: true, quiet: true });
 
 const strategyEnum = z.enum(["Spot", "Curve", "BidAsk"]);
 
@@ -12,6 +12,8 @@ const envSchema = z.object({
   SOLANA_RPC_FALLBACK_URLS: z.string().default(""),
   BOT_WALLET_KEYPAIR_PATH: z.string().min(1),
   POOL_ADDRESS: z.string().trim().default(""),
+  // Legacy CLI only: maximum USD value the CLI deploys. 0 = no cap (the whole wallet balance).
+  CLI_ALLOCATION_USDC: z.coerce.number().nonnegative().default(0),
   BOT_REGISTRY_FILE: z.string().default("./data/bots.json"),
   BOT_PNL_LEDGER_FILE: z.string().default("./data/pnl-ledger.json"),
   LOG_FILE: z.string().default("./data/logs/rebalancer.log"),

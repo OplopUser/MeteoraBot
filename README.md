@@ -152,6 +152,7 @@ Set `SOLANA_RPC_URL` plus an optional comma-separated `SOLANA_RPC_FALLBACK_URLS`
 | Module | Responsibility |
 | --- | --- |
 | `src/controlPanel.ts` | HTTP server: serves `public/` and the JSON API, entry point of the Docker image |
+| `src/panelAuth.ts` | Optional `UI_TOKEN` authentication for the panel and API (login form, cookie, bearer header) |
 | `src/index.ts` | Legacy single-bot CLI entry point (see [Running locally](#running-locally)) |
 | `src/config.ts` | Environment variable schema (zod) and defaults |
 | `src/botConfig.ts` | Merges a bot's own settings over the global config |
@@ -171,7 +172,7 @@ Set `SOLANA_RPC_URL` plus an optional comma-separated `SOLANA_RPC_FALLBACK_URLS`
 
 ## Control panel
 
-`npm run ui` (or the Docker container) starts the control panel at **`http://<host>:8789`**. It binds to `HOST` (default `0.0.0.0`) and `UI_PORT` (default `8789`), and the page refreshes every 15 seconds.
+`npm run ui` (or the Docker container) starts the control panel at **`http://localhost:8789`**. It binds to `UI_HOST` (default `127.0.0.1`, so only this machine can reach it) and `UI_PORT` (default `8789`), and the page refreshes every 15 seconds.
 
 The panel shows:
 
@@ -182,11 +183,22 @@ The panel shows:
 - **Position ledger:** every tracked position with entry capital, current or final value, net PnL and fees vs. costs.
 - **Transactions:** close, swap, deposit, compound, trigger, recovery and failure events parsed from the log file, with filters by bot, type and status, plus free-text search.
 
-> The control panel has **no authentication**. Anyone who can reach the port can move the wallet's funds into and out of positions. Keep it on a trusted LAN or behind a VPN or an authenticating reverse proxy, and never expose it to the internet directly.
+### Authentication
+
+Anyone who can reach the panel can move the wallet's funds into and out of positions, so access is limited in two ways:
+
+- **Bind address.** By default the panel listens on `127.0.0.1` only. Set `UI_HOST=0.0.0.0` (or a LAN address) to reach it from other machines.
+- **Token.** When `UI_TOKEN` is set, every page and every `/api` request must present it. Browsers get a sign-in form; the token is then kept in an `HttpOnly`, `SameSite=Strict` cookie for 30 days. Opening `http://<host>:8789/?token=<UI_TOKEN>` once does the same and removes the token from the address bar. API clients send `Authorization: Bearer <UI_TOKEN>` (or `x-ui-token: <UI_TOKEN>`). Tokens are compared in constant time.
+
+Without `UI_TOKEN` the panel is unauthenticated, and it logs a warning at startup if it is bound to a non-loopback address. Always set a long random `UI_TOKEN` (e.g. `openssl rand -hex 32`) before exposing the port. The panel serves plain HTTP: beyond a trusted LAN, put it behind a VPN or an HTTPS reverse proxy, and never expose it to the internet directly.
 
 ### API
 
-All endpoints return JSON.
+All endpoints return JSON. With `UI_TOKEN` set they require the token (see [Authentication](#authentication)) and return `401` without it:
+
+```bash
+curl -H "Authorization: Bearer $UI_TOKEN" http://localhost:8789/api/status
+```
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -236,13 +248,14 @@ These settings are stored per bot in `BOT_REGISTRY_FILE`. The defaults shown are
 
 ```bash
 curl -X PATCH http://localhost:8789/api/bots/<bot-id> \
+  -H "Authorization: Bearer $UI_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"rangeBins": 40, "driftThresholdPct": 0.8, "trendShiftBins": 3}'
 ```
 
 ## Requirements
 
-- Node.js **≥ 20.11** (from `package.json` `engines`; the Docker image uses Node 23)
+- Node.js **≥ 20.11** (from `package.json` `engines`; the Docker image uses Node 24 LTS)
 - A Solana mainnet RPC endpoint (a dedicated or paid one is recommended; public endpoints rate-limit heavily)
 - A Solana keypair file for a **dedicated hot wallet**, funded with the pool's tokens plus SOL for fees and rent
 - Optional: Docker with Compose, and a 64-bit OS for Raspberry Pi deployments (the published image is `linux/arm64` only)
@@ -299,9 +312,11 @@ BOT_WALLET_KEYPAIR_PATH=./wallet.json
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` |
 | `JUPITER_API_BASE_URL` | `https://lite-api.jup.ag/swap/v1` | Jupiter swap API base URL |
 | `JUPITER_API_KEY` | *(empty)* | Sent as `x-api-key` when set |
-| `HOST` | `0.0.0.0` | Control panel bind address |
+| `UI_HOST` | `127.0.0.1` | Control panel bind address. Use `0.0.0.0` to listen on all interfaces (the Docker image does) |
 | `UI_PORT` | `8789` | Control panel port |
-| `POOL_ADDRESS` | *(empty)* | DLMM pool (lb pair) address for the legacy CLI and `scripts/force-close.ts`. Required by both; not used by the control panel |
+| `UI_TOKEN` | *(empty)* | Access token for the control panel and its API. Empty means no authentication; set it whenever `UI_HOST` is not loopback |
+| `POOL_ADDRESS` | *(empty)* | DLMM pool (lb pair) address for the legacy CLI and the maintenance scripts. Required by them; not used by the control panel |
+| `CLI_ALLOCATION_USDC` | `0` | Maximum USD value the legacy CLI deploys (like a panel bot's `allocationUsdc`). `0` means no cap: the whole wallet balance |
 | `DEFAULT_STRATEGY` | `Spot` | Distribution strategy for the legacy CLI (`Spot`, `Curve` or `BidAsk`) |
 
 **Global trading defaults.** In the control panel each bot's own settings override these values (`src/botConfig.ts`). They only take effect in the legacy CLI.
@@ -322,7 +337,7 @@ BOT_WALLET_KEYPAIR_PATH=./wallet.json
 | --- | --- |
 | `npm run ui` | Starts the control panel and bot supervisor (`tsx src/controlPanel.ts`). **This is the main way to run the bot.** |
 | `npm test` | Runs the Vitest suite |
-| `npm run typecheck` | `tsc --noEmit` |
+| `npm run typecheck` | `tsc --noEmit` for the app and tests, plus `scripts/` (`tsconfig.scripts.json`) |
 | `npm run build` | Compiles TypeScript to `dist/` (used as a check; the app itself runs through `tsx`) |
 | `npm run run` / `npm run dry-run` / `npm run rebalance-now` | Legacy single-bot CLI (`src/index.ts`) for one pool, see [Legacy CLI](#legacy-cli) |
 
@@ -351,7 +366,9 @@ npm run dry-run -- <dlmm-pool-address> # or pass the pool as an argument (overri
 
 The pool comes from the argument or `POOL_ADDRESS`; the CLI exits with an error if neither is set or the address is not a valid public key. Token mints, decimals and bin step are read from the pool, the strategy comes from `DEFAULT_STRATEGY`, and the trading settings from the global defaults above. Runtime state is saved to `state.json` next to `BOT_REGISTRY_FILE`.
 
-> The CLI has **no allocation cap** (there is no `allocationUsdc` here): it deploys the wallet's whole balance of the pool's tokens, minus the deployment buffer and SOL reserve. It does not write to the PnL ledger, and with no position it opens one straight away. Stop any control-panel bot on the same pool first.
+Set `CLI_ALLOCATION_USDC` to cap how much the CLI deploys, the same way a panel bot's `allocationUsdc` does. It works for pools with USDC or SOL on either side (SOL pairs are valued with a live Jupiter SOL/USDC quote); for other pools, or if the price cannot be fetched at startup, the CLI exits instead of deploying uncapped.
+
+> Without `CLI_ALLOCATION_USDC` the CLI deploys the wallet's **whole balance** of the pool's tokens, minus the deployment buffer and SOL reserve, and logs a warning saying so. It does not write to the PnL ledger, and with no position it opens one straight away. Stop any control-panel bot on the same pool first.
 
 ## Running with Docker / on a Raspberry Pi
 
@@ -359,16 +376,16 @@ The GitHub Actions workflow (`.github/workflows/build-and-push.yml`) builds a `l
 
 The image:
 
-- compiles TypeScript in a build stage (as a check), then runs `src/controlPanel.ts` through `tsx` on Node 23;
+- compiles TypeScript in a build stage (as a check), then runs `src/controlPanel.ts` through `tsx`; both stages use the same Node version (`NODE_VERSION` build arg, default 24 LTS);
 - patches `@meteora-ag/dlmm`'s `package.json` to force its CommonJS build, which works around an ESM import problem with `@coral-xyz/anchor`;
-- exposes port `8789`.
+- sets `UI_HOST=0.0.0.0` so the panel is reachable through the published port, and exposes port `8789`.
 
 On the Pi (64-bit OS), next to `docker-compose.yml`:
 
 ```bash
 mkdir -p data
 cp /path/to/wallet.json ./wallet.json && chmod 600 wallet.json
-# .env: set BOT_WALLET_KEYPAIR_PATH=/app/wallet.json and your RPC URL(s)
+# .env: set BOT_WALLET_KEYPAIR_PATH=/app/wallet.json, your RPC URL(s) and UI_TOKEN
 docker compose pull
 docker compose up -d
 docker compose logs -f
@@ -379,13 +396,16 @@ docker compose logs -f
 - reads `.env` via `env_file`;
 - mounts `./data` → `/app/data` (registry, ledger and logs survive restarts);
 - mounts `./wallet.json` → `/app/wallet.json` read-only;
-- publishes `8789:8789`, restarts `unless-stopped` and rotates Docker logs (3 × 10 MB).
+- sets `UI_HOST=0.0.0.0` inside the container and publishes the port on the host's loopback only (`127.0.0.1:8789:8789`);
+- restarts `unless-stopped` and rotates Docker logs (3 × 10 MB).
+
+To open the panel from other machines on your network, **set `UI_TOKEN` in `.env`** and change the port mapping to `"8789:8789"`. Inside the container the panel always listens on all interfaces, so the token is what protects it once the port is published beyond localhost.
 
 If the GHCR package is private, run `docker login ghcr.io` first. On an x86 host, build the image yourself (`docker build -t meteora-bot .`) and point `image:` in the compose file at it. The published image is ARM64 only.
 
 ## Maintenance scripts
 
-One-off helpers in `scripts/`. Run them with `tsx`; they read the same `.env`:
+One-off helpers in `scripts/`. Run them with `tsx`; they read the same `.env` and are type-checked by `npm run typecheck`:
 
 ```bash
 npx tsx scripts/list-positions.ts
@@ -393,11 +413,11 @@ npx tsx scripts/list-positions.ts
 
 | Script | What it does |
 | --- | --- |
-| `scripts/list-positions.ts` | Lists the wallet's positions in one pool with total X/Y amounts and non-empty bin counts. Read-only. |
-| `scripts/check-balance.ts` | Prints how many DLMM positions the wallet still has, plus its SOL and USDC balances. The USD estimate uses a **hard-coded** SOL price, so treat it as rough. Read-only. |
+| `scripts/list-positions.ts` | Lists the wallet's positions in the `POOL_ADDRESS` pool with total X/Y amounts and non-empty bin counts. Read-only. |
+| `scripts/check-balance.ts` | Prints how many DLMM positions the wallet still has, plus its SOL and USDC balances and a USD total at the live Jupiter SOL/USDC quote (omitted if the quote is unavailable). Read-only. |
 | `scripts/force-close.ts` | **Sends transactions.** Closes every wallet position in the `POOL_ADDRESS` pool except the address in the `ACTIVE_POSITION` environment variable. Refuses to run without `ACTIVE_POSITION` unless `--all` is passed, and refuses if `ACTIVE_POSITION` is not one of the wallet's positions in that pool. Exits non-zero if any close fails. |
 
-`force-close.ts` takes its pool from `POOL_ADDRESS` (in `.env` or the environment) and exits with an error if it is not set. `list-positions.ts` still targets a pool address hard-coded in the `pool` constant at the top of the file (a SOL/USDC pool); edit it before using it on another pool. Stop the bot before running `force-close.ts`:
+`list-positions.ts` and `force-close.ts` take their pool from `POOL_ADDRESS` (in `.env` or the environment) and exit with an error if it is not set. Stop the bot before running `force-close.ts`:
 
 ```bash
 ACTIVE_POSITION=<position-to-keep> npx tsx scripts/force-close.ts
@@ -411,7 +431,12 @@ npx tsx scripts/force-close.ts --all
 npm test
 ```
 
-`tests/bins.test.ts` covers the pure strategy math in `src/strategy/bins.ts`: price↔bin conversion and round-trips, range and price-band computation, centred ranges, min/max and bin-level drift triggers (including boundaries and negative bin ids), target value weights for all three strategies, and base-unit conversion. On-chain behaviour (DLMM, Jupiter, RPC) has no automated tests. The CI workflow builds the Docker image but does not run the tests.
+- `tests/bins.test.ts` covers the pure strategy math in `src/strategy/bins.ts`: price↔bin conversion and round-trips, range and price-band computation, centred ranges, min/max and bin-level drift triggers (including boundaries and negative bin ids), target value weights for all three strategies, and base-unit conversion.
+- `tests/panelAuth.test.ts` covers the control-panel token check (`src/panelAuth.ts`): constant-time comparison, header/cookie extraction, loopback detection, and a real HTTP server that must reject `/api` and the page without the token and accept it via header, cookie, login form or `?token=`.
+- `tests/allocationCap.test.ts` drives the rebalancer with stubbed clients: when the allocation cap cannot be priced it must not swap or open and must schedule a retry, and when it can be priced the open is capped to the budget.
+- `tests/escape.test.ts` covers the HTML escaping (`public/escape.js`) used for every server-supplied string the panel renders.
+
+On-chain behaviour (DLMM, Jupiter, RPC) has no automated tests. The CI workflow builds the Docker image but does not run the tests.
 
 ## Project structure
 
@@ -419,6 +444,7 @@ npm test
 .
 ├── src/
 │   ├── controlPanel.ts        # HTTP server + JSON API (main entry point)
+│   ├── panelAuth.ts           # optional UI_TOKEN auth for the panel
 │   ├── index.ts               # legacy CLI entry point
 │   ├── config.ts              # env schema and defaults
 │   ├── botConfig.ts           # per-bot config overlay
@@ -431,7 +457,7 @@ npm test
 │   └── strategy/bins.ts       # bin math and triggers
 ├── public/                    # control panel (HTML, CSS, vanilla JS)
 ├── scripts/                   # maintenance scripts
-├── tests/bins.test.ts         # Vitest unit tests
+├── tests/                     # Vitest unit tests
 ├── Dockerfile                 # multi-stage image, runs the control panel
 ├── docker-compose.yml         # Pi / server deployment
 └── .github/workflows/         # ARM64 image build and push to GHCR
@@ -441,10 +467,10 @@ npm test
 
 - **Real funds, experimental code.** The bot signs and sends mainnet transactions from a hot wallet without asking. Bugs, RPC problems or bad settings can lose money. There are no guarantees of any kind; use small amounts.
 - **Impermanent loss and rebalancing costs.** Concentrated liquidity loses value against holding when the price trends. Each rebalance realises that loss and pays swap slippage, priority fees and rent. In fast or trending markets, frequent rebalancing can cost more than the fees earned.
-- **No authentication on the control panel.** See [Control panel](#control-panel).
+- **Control panel security is basic.** Authentication is a single shared `UI_TOKEN` (off unless set) over plain HTTP, with no rate limiting or user accounts. Keep it on loopback or a trusted network. See [Authentication](#authentication).
 - **One bot per pool.** Before opening, the bot adopts any other wallet position in its pool. Running two bots on the same pool, or holding manual positions in a bot's pool, will confuse it.
 - **Close while running reopens.** **Close** on a running bot closes the position, and the next cycle bootstraps a new one. Press **Stop** first if you want the funds to stay out. **Archive** and **Stop** leave the current position open.
-- **Shared wallet allocation.** `allocationUsdc` caps each bot by value, but nothing reserves funds between bots. Over-allocation is not detected.
+- **Shared wallet allocation.** `allocationUsdc` caps each bot by value, but nothing reserves funds between bots. Over-allocation is not detected. If the cap cannot be priced in USD (no SOL/USDC reference available), the bot does not deploy: it keeps the funds in the wallet, shows "Waiting to retry" with the reason and tries again with backoff.
 - **Fixed parameters.** Priority fee is a fixed 50,000 micro-lamports per compute unit on Meteora transactions. The SOL reserve is a fixed 0.1 SOL. Several stored slippage settings are not wired in yet (see the tables above).
 - **USD values are approximations.** The positions table treats the quote token as USD. Ledger conversion depends on a SOL/USDC reference and falls back to quote = $1.
 - **Token coverage.** Balance reads cover native SOL and SPL Token program accounts. Token-2022 balances are not read. Token symbols come from a small built-in list, otherwise a shortened mint.

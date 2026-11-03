@@ -69,9 +69,9 @@ interface RebalancerOptions {
   trendShiftBins?: number;
 }
 
-class AllocationQuoteBudgetUnavailableError extends Error {
+export class AllocationQuoteBudgetUnavailableError extends Error {
   constructor() {
-    super("Allocation quote budget is unavailable for this pool");
+    super("Allocation cap could not be priced (token USD price unavailable); not deploying until it can be");
     this.name = "AllocationQuoteBudgetUnavailableError";
   }
 }
@@ -563,7 +563,18 @@ export class RebalancerService {
       };
     }
 
-    balances = await this.capBalancesToAllocation(currentPrice, balances);
+    try {
+      balances = await this.capBalancesToAllocation(currentPrice, balances);
+    } catch (error) {
+      if (!(error instanceof AllocationQuoteBudgetUnavailableError)) throw error;
+      this.logger.warn(
+        { execute: false, error: error.message },
+        "dry-run: allocation cap could not be priced; a real run would wait and retry instead of deploying"
+      );
+      state.latestAction = "dry-run: allocation cap could not be priced";
+      await this.stateStore.save(state);
+      return;
+    }
 
     // Compute swap needed
     const { lowerBinId, upperBinId } = this.computeTargetBinRange(currentPrice, null);
@@ -776,7 +787,12 @@ export class RebalancerService {
     let balances = pending.previousPositionAddress
       ? await this.waitForPostCloseBalances(owner, tokenAMint, tokenBMint)
       : await this.accountReader.getWalletBalances(owner, tokenAMint, tokenBMint);
-    balances = await this.capBalancesToAllocation(pending.targetCenterPrice, balances);
+    try {
+      balances = await this.capBalancesToAllocation(pending.targetCenterPrice, balances);
+    } catch (error) {
+      if (await this.handleAllocationBudgetUnavailable(state, error)) return;
+      throw error;
+    }
 
     // Reserve SOL for position account rent and transaction fees
     const SWAP_RENT_RESERVE = 100_000_000n;
@@ -1021,6 +1037,7 @@ export class RebalancerService {
         openResult.upperPrice
       );
     } catch (error) {
+      if (await this.handleAllocationBudgetUnavailable(state, error)) return;
       if (await this.handleOpenTimeout(state, error)) return;
       if (await this.handleRetryableOpenFailure(state, error)) return;
       if (await this.handleRecoverableRpcFailure(state, error)) return;
@@ -1122,6 +1139,32 @@ export class RebalancerService {
     this.logger.warn(
       { phase: pending.phase, attempt: pending.retryCount, error: (error as Error).message, nextRetryAt: pending.nextRetryAt },
       "recoverable rpc failure; retrying automatically"
+    );
+    return true;
+  }
+
+  /**
+   * The allocation cap could not be priced. Never deploy uncapped: keep the funds in the wallet,
+   * record the reason and retry the same phase with backoff (the bot shows "Waiting to retry").
+   */
+  private async handleAllocationBudgetUnavailable(state: BotRuntimeState, error: unknown) {
+    const pending = state.pendingRebalance;
+    if (!pending || !(error instanceof AllocationQuoteBudgetUnavailableError)) return false;
+
+    pending.retryCount += 1;
+    pending.recoveryReason = error.message;
+    pending.nextRetryAt = new Date(
+      Date.now() + Math.min(
+        RebalancerService.MAX_RPC_RETRY_BACKOFF_MS,
+        RebalancerService.RPC_RETRY_BACKOFF_MS * Math.max(1, pending.retryCount)
+      )
+    ).toISOString();
+    state.latestAction = `waiting to ${pending.phase === "opening" ? "open" : "swap"}: allocation cap could not be priced`;
+    await this.stateStore.save(state);
+
+    this.logger.warn(
+      { phase: pending.phase, attempt: pending.retryCount, error: error.message, nextRetryAt: pending.nextRetryAt },
+      "allocation cap unavailable; not deploying, will retry"
     );
     return true;
   }
@@ -1418,8 +1461,11 @@ export class RebalancerService {
   private async capBalancesToAllocation(currentPrice: number, balances: WalletBalances): Promise<WalletBalances> {
     if (!this.options.resolveAllocationQuoteBudget) return balances;
 
+    // A configured cap that cannot be priced must never fall back to the whole wallet balance.
     const budget = await this.options.resolveAllocationQuoteBudget(currentPrice);
-    if (!budget || !Number.isFinite(budget) || budget <= 0) return balances;
+    if (budget == null || !Number.isFinite(budget) || budget <= 0) {
+      throw new AllocationQuoteBudgetUnavailableError();
+    }
 
     const tokenADecimals = this.options.tokenADecimals ?? 9;
     const tokenBDecimals = this.options.tokenBDecimals ?? 6;

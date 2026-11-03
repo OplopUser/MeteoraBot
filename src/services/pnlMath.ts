@@ -6,8 +6,8 @@ import type {
 } from "../domain.js";
 import { fromBaseUnits } from "../strategy/bins.js";
 
-const SOL_MINT = "So11111111111111111111111111111111111111112";
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+export const SOL_MINT = "So11111111111111111111111111111111111111112";
+export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 export interface TokenPricesUsdc {
   tokenAUsdc: number;
@@ -117,7 +117,7 @@ export function resolveTokenPricesUsdc(
 }
 
 export function resolveTokenPricesUsdcStrict(
-  bot: BotDefinition,
+  bot: Pick<BotDefinition, "tokenAMint" | "tokenBMint">,
   currentPrice: number,
   bots: Array<{ definition: BotDefinition; runtime: { lastObservedPrice: number | null; lastCenterPrice: number | null } }>
 ): TokenPricesUsdc | null {
@@ -140,7 +140,7 @@ export function resolveTokenPricesUsdcStrict(
   return null;
 }
 
-function resolveDirectTokenPrices(bot: BotDefinition, currentPrice: number): TokenPricesUsdc | null {
+function resolveDirectTokenPrices(bot: Pick<BotDefinition, "tokenAMint" | "tokenBMint">, currentPrice: number): TokenPricesUsdc | null {
   if (bot.tokenBMint === USDC_MINT) {
     const solUsdc = bot.tokenAMint === SOL_MINT ? currentPrice : 0;
     return { tokenAUsdc: currentPrice, tokenBUsdc: 1, solUsdc };

@@ -1,5 +1,8 @@
+# Same Node version in both stages (Active LTS; package.json engines requires >=20.11).
+ARG NODE_VERSION=24
+
 # ── Build stage ────────────────────────────────────────────────
-FROM node:current-bookworm-slim AS build
+FROM node:${NODE_VERSION}-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -19,7 +22,7 @@ COPY public/ public/
 RUN npm run build
 
 # ── Runtime stage ─────────────────────────────────────────────
-FROM node:23-bookworm-slim
+FROM node:${NODE_VERSION}-bookworm-slim
 
 WORKDIR /app
 
@@ -42,6 +45,10 @@ delete pkg.module; \
 pkg.exports = { '.': { 'require': './dist/index.js', 'default': './dist/index.js' } }; \
 fs.writeFileSync(p, JSON.stringify(pkg, null, 2)); \
 console.log('Patched DLMM to use CJS');"
+
+# Listen on all interfaces inside the container so the published port works.
+# Set UI_TOKEN in .env before exposing the port beyond localhost.
+ENV UI_HOST=0.0.0.0
 
 EXPOSE 8789
 

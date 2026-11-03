@@ -4,8 +4,13 @@ services:
     container_name: meteora-bot
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Listen on all interfaces inside the container; the host side is limited by "ports" below.
+      UI_HOST: 0.0.0.0
     ports:
-      - "8789:8789"
+      # Published on the host's loopback only. To reach the panel from other machines,
+      # set UI_TOKEN in .env and change this to "8789:8789".
+      - "127.0.0.1:8789:8789"
     volumes:
       - ./data:/app/data
       - ./wallet.json:/app/wallet.json:ro

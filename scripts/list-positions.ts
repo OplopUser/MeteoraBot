@@ -1,13 +1,18 @@
-import "dotenv/config";
 import { loadConfig } from "../src/config.js";
 import { MeteoraClient } from "../src/clients/meteoraClient.js";
 import { createLogger } from "../src/logger.js";
 
+// Usage: npx tsx scripts/list-positions.ts   (pool from POOL_ADDRESS)
 const config = loadConfig();
-const client = new MeteoraClient(config, createLogger(config));
-await (client as any).init();
+const pool = config.POOL_ADDRESS;
+if (!pool) {
+  console.error("POOL_ADDRESS is not set. Set it in .env or the environment.");
+  process.exit(1);
+}
 
-const pool = "BGm1tav58oGcsQJehL9WXBFXF7D27vZsKefj4xJKD5Y";
+const client = new MeteoraClient(config, createLogger(config));
+await client.init();
+
 const dlmm = await (client as any).createDlmmInstance(pool);
 const wallet = (client as any).wallet;
 const { userPositions } = await dlmm.getPositionsByUserAndLbPair(wallet.publicKey);

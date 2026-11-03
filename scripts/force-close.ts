@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { loadConfig } from "../src/config.js";
 import { MeteoraClient } from "../src/clients/meteoraClient.js";
 import { createLogger } from "../src/logger.js";

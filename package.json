@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
     "run": "tsx src/index.ts run",
     "dry-run": "tsx src/index.ts dry-run",
     "rebalance-now": "tsx src/index.ts rebalance-now",
